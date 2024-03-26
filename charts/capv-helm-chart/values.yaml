@@ -212,8 +212,8 @@ vsphere:
   server: ""
   # -- VSphere https TLS thumbprint
   tlsThumbprint: ""
-  # -- Insecure Flag. True or false, defaults to false
-  insecure: ""
+  # -- Insecure Flag. True or false
+  insecure: "true"
 
 
 
@@ -282,10 +282,3 @@ storageClass:
   fsType: ext4
   # -- VSphere Storage policy
   storagePolicy: ""
-
-cni:
-  calico:
-    # -- Installs cni calico on the cluster
-    enabled: false
-    # -- specific config for calico, see https://projectcalico.docs.tigera.io/getting-started/kubernetes/installation/config-options
-    config: ""
