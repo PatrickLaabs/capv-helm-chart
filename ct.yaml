@@ -1,0 +1,9 @@
+remote: origin
+target-branch: main
+chart-dirs:
+  - charts
+chart-repos:
+  - sample-application=https://patricklaabs.github.io/sample-application/
+exclude-deprecated: true
+debug: true
+helm-extra-args: "--timeout 15m"

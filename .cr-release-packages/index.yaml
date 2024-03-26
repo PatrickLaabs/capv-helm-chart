@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  capv-helm-chart:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2024-03-26T09:30:01.713118+01:00"
+    description: A Helm chart for Kubernetes
+    digest: b4792e6f389690c3df614ea33c00c5872ff55251b0bbbe4b60da5033835d04c9
+    name: capv-helm-chart
+    type: application
+    urls:
+    - https://patricklaabs.github.io/capv-helm-chart/capv-helm-chart-0.1.0.tgz
+    version: 0.1.0
+generated: "2024-03-26T09:30:01.712605+01:00"
