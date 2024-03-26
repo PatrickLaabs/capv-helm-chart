@@ -1,0 +1,24 @@
+{{- if .Values.storageClass.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels: {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ include "capv-helm-chart.clusterName" . }}-storageclass
+  namespace: {{ .Release.Namespace | quote }}
+data:
+  data: |
+    apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata:
+      name: {{ .Values.storageClass.name }}
+      annotations:
+        storageclass.kubernetes.io/is-default-class: "{{ .Values.storageClass.default }}"
+    reclaimPolicy: {{ .Values.storageClass.reclaimPolicy }}
+    provisioner: csi.vsphere.vmware.com
+    parameters:
+      storagepolicyname: "{{ .Values.storageClass.storagePolicy }}"
+      fstype: "{{ .Values.storageClass.fsType }}"
+{{- end }}

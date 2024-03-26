@@ -1,0 +1,75 @@
+---
+{{- if or .Values.vsphereCsi.enabled .Values.storageClass.enabled .Values.cluster.additionalClusterResourceSet }}
+apiVersion: addons.cluster.x-k8s.io/v1beta1
+kind: ClusterResourceSet
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    cluster.x-k8s.io/cluster-name: {{ include "capv-helm-chart.clusterName" . }}
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ include "capv-helm-chart.clusterName" . }}-crs-0
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  clusterSelector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: {{ include "capv-helm-chart.clusterName" . }}
+      {{- include "capv-helm-chart.selectorLabels" . | nindent 6 }}
+  resources:
+  {{- if .Values.vsphereCsi.enabled }}
+# VSPHERE-CSI - START
+  - kind: Secret
+    name: vsphere-config-secret
+  - kind: ConfigMap
+    name: csi.vsphere.vmware.com
+  - kind: Secret
+    name: vsphere-csi-controller
+  - kind: ConfigMap
+    name: vsphere-csi-controller-role
+  - kind: ConfigMap
+    name: vsphere-csi-controller-binding
+  - kind: Secret
+    name: vsphere-csi-node-sa
+  - kind: ConfigMap
+    name: vsphere-csi-node-cluster-role
+  - kind: ConfigMap
+    name: vsphere-csi-node-cluster-role-binding
+  - kind: ConfigMap
+    name: vsphere-csi-node-role
+  - kind: ConfigMap
+    name: vsphere-csi-node-binding
+  - kind: ConfigMap
+    name: internal-feature-states.csi.vsphere.vmware.com
+  - kind: ConfigMap
+    name: vsphere-csi-controller-service
+  - kind: ConfigMap
+    name: vsphere-csi-controller
+  - kind: ConfigMap
+    name: vsphere-csi-node
+    # VSPHERE-CSI - END
+  # VSPHERE-CPI - START
+  - kind: Secret
+    name: cloud-controller-manager
+  - kind: Secret
+    name: vsphere-cloud-secret
+  - kind: ConfigMap
+    name: cpi-manifests
+  # VSPHERE-CPI - END
+  {{- end }}
+  {{- if .Values.storageClass.enabled }}
+  - kind: ConfigMap
+    name: {{ include "capv-helm-chart.clusterName" . }}-storageclass
+  {{- end }}
+  {{- if .Values.cni.calico.enabled }}
+  - kind: ConfigMap
+    name: cni-calico-crd-others
+  - kind: ConfigMap
+    name: cni-calico-crd-installations
+  - kind: ConfigMap
+    name: cni-calico
+  {{- end }}
+  {{- if .Values.cluster.additionalClusterResourceSet }}
+{{ toYaml .Values.cluster.additionalClusterResourceSet | indent 2 }}
+  {{- end }}
+{{- end }}

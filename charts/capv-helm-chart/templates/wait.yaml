@@ -1,0 +1,130 @@
+{{- if or .Values.wait.cluster .Values.wait.apiServer }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    {{- if include "capv-helm-chart.annotations" . }}
+      {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+    {{- end }}
+  labels: {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: capi-watcher
+  namespace: {{ .Release.Namespace | quote }}
+rules:
+- apiGroups:
+  - "cluster.x-k8s.io"
+  resources:
+  - machinedeployments
+  - machinesets
+  - machinepools
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - "controlplane.cluster.x-k8s.io"
+  resources:
+  - kubeadmcontrolplanes
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    {{- if include "capv-helm-chart.annotations" . }}
+      {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+    {{- end }}
+  labels: {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: capi-watcher
+  namespace: {{ .Release.Namespace | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: capi-watcher
+subjects:
+- kind: ServiceAccount
+  name: default
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": post-install,post-upgrade
+    {{- if include "capv-helm-chart.annotations" . }}
+      {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+    {{- end }}
+  labels: {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: wait-completion
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  backoffLimit: 0
+  completions: 1
+  activeDeadlineSeconds: {{ .Values.wait.timeout }}
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      containers:
+      - image: bitnami/kubectl:1.21
+        name: wait
+        command:
+          - bash
+          - -c
+          - |
+            ALL_DONE="false"
+            while [ "$ALL_DONE" != "true" ]
+            do
+              ALL_DONE="true"
+              sleep 2
+              
+              {{- if or .Values.wait.cluster }}
+              ## Rollout of deployments
+              for MACHINEDEPLOYMENT in $(kubectl get machinedeployments -l 'cluster.x-k8s.io/cluster-name={{ include "capv-helm-chart.clusterName" . }}' -o name)
+              do
+                CURRENT_STATE=$(kubectl get $MACHINEDEPLOYMENT -o json)
+                NB_AVAILABLE=$(echo $CURRENT_STATE | jq -r '.status.availableReplicas // 0' )
+                NB_REPLICAS=$(echo $CURRENT_STATE | jq -r '.status.replicas // 0')
+                NB_UPDATEDREPLICAS=$(echo $CURRENT_STATE | jq -r '.status.updatedReplicas // 0')
+                NB_UNAVAILABLE=$(echo $CURRENT_STATE | jq -r '.status.unavailableReplicas // 0')
+                PHASE=$(echo $CURRENT_STATE | jq -r '.status.phase')
+                SPEC_REPLICAS=$(echo $CURRENT_STATE | jq -r '.spec.replicas')
+
+                echo "$MACHINEDEPLOYMENT: Phase: $PHASE, $SPEC_REPLICAS wanted, $NB_REPLICAS currently, $NB_UPDATEDREPLICAS up-to-date, $NB_AVAILABLE available, $NB_UNAVAILABLE unavailable"
+                if [ "x$PHASE" != "xRunning" -o "$NB_REPLICAS" != "$SPEC_REPLICAS" -o "$SPEC_REPLICAS" != "$NB_UPDATEDREPLICAS" -o "$SPEC_REPLICAS" != "$NB_AVAILABLE" -o "$NB_UNAVAILABLE" != "0" -o -z "$NB_REPLICAS" ]
+                then
+                  echo "Waiting for $MACHINEDEPLOYMENT to finish rollout..."
+                  ALL_DONE="false"
+                else
+                  echo "$MACHINEDEPLOYMENT has rolled out"
+                fi
+              done
+              {{- end }}
+              ## Rollout of control-plane
+              CTRLPLANE=$(kubectl get kubeadmcontrolplane {{ include "capv-helm-chart.clusterName" . }} -o json)
+              CTRL_SPEC_REPLICAS=$(echo $CTRLPLANE | jq -r '.spec.replicas // 0')
+              CTRL_REPLICAS=$(echo $CTRLPLANE | jq -r '.status.replicas // 0')
+              CTRL_UPDATEDREPLICAS=$(echo $CTRLPLANE | jq -r '.status.updatedReplicas // 0')
+              CTRL_UNAVAILABLEREPLICAS=$(echo $CTRLPLANE | jq -r '.status.unavailableReplicas // 0')
+              echo "ControlPlane : $CTRL_SPEC_REPLICAS wanted, $CTRL_REPLICAS currently, $CTRL_UPDATEDREPLICAS up-to-date, $CTRL_UNAVAILABLEREPLICAS unavailable"
+              {{- if .Values.wait.cluster }}
+              if [ "$CTRL_SPEC_REPLICAS" !=  "$CTRL_REPLICAS" -o "$CTRL_UPDATEDREPLICAS" != "$CTRL_SPEC_REPLICAS" -o "$CTRL_UNAVAILABLEREPLICAS" != "0" -o -z "$CTRL_REPLICAS" ]
+              {{- else }}
+              CTRL_READYREPLICAS=$(echo $CTRLPLANE | jq -r '.status.readyReplicas // 0')
+              if [ "$CTRL_READYREPLICAS" ==  "0" ]
+              {{- end }}
+              then
+                echo "Waiting for controlplane to finish rollout..."
+                ALL_DONE="false"
+              else
+                echo "ControlPlane has rolled out"
+              fi
+            done
+      restartPolicy: Never
+{{- end }}

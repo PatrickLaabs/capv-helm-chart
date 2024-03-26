@@ -1,0 +1,72 @@
+{{- if .Values.machines.controlPlane.machineHealthCheck.enabled }}
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineHealthCheck
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ include "capv-helm-chart.clusterName" . }}-controlplane
+spec:
+  clusterName: {{ include "capv-helm-chart.clusterName" . }}
+  {{- if .Values.machines.controlPlane.machineHealthCheck.maxUnhealthy }}
+  maxUnhealthy: {{ .Values.machines.controlPlane.machineHealthCheck.maxUnhealthy }}
+  {{- end }}
+  {{- if .Values.machines.controlPlane.machineHealthCheck.nodeStartupTimeout }}
+  nodeStartupTimeout: {{ .Values.machines.controlPlane.machineHealthCheck.nodeStartupTimeout }}
+  {{- end }}
+  {{- if .Values.machines.controlPlane.machineHealthCheck.unhealthyRange }}
+  unhealthyRange: '{{ .Values.machines.controlPlane.machineHealthCheck.unhealthyRange }}'
+  {{- end }}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/control-plane: ""
+  unhealthyConditions:
+    {{- toYaml  .Values.machines.controlPlane.machineHealthCheck.unhealthyConditions | nindent 4 }}
+{{- end }}
+
+{{- $outer := . }}
+{{- range $workerName, $workerPool := .Values.machines.workers }}
+{{- with $outer }}
+{{- if $workerPool.machineHealthCheck }}
+{{- if $workerPool.machineHealthCheck.enabled }}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineHealthCheck
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ include "capv-helm-chart.clusterName" . }}-{{ $workerName }}
+spec:
+  clusterName: {{ include "capv-helm-chart.clusterName" . }}
+  {{- if $workerPool.machineHealthCheck.maxUnhealthy }}
+  maxUnhealthy: {{ $workerPool.machineHealthCheck.maxUnhealthy }}
+  {{- end }}
+  {{- if $workerPool.machineHealthCheck.nodeStartupTimeout }}
+  nodeStartupTimeout: {{ $workerPool.machineHealthCheck.nodeStartupTimeout }}
+  {{- end }}
+  {{- if $workerPool.machineHealthCheck.unhealthyRange }}
+  unhealthyRange: '{{ $workerPool.machineHealthCheck.unhealthyRange }}'
+  {{- end }}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/deployment-name: {{ include "capv-helm-chart.clusterName" . }}-{{ $workerName }}
+  unhealthyConditions:
+    {{- if $workerPool.machineHealthCheck.unhealthyConditions }}
+    {{- toYaml  $workerPool.machineHealthCheck.unhealthyConditions | nindent 4 }}
+    {{- else }}
+    - type: Ready
+      status: Unknown
+      timeout: 300s
+    - type: Ready
+      status: "False"
+      timeout: 300s
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

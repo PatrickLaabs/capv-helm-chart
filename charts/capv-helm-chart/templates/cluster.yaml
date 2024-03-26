@@ -1,0 +1,63 @@
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    cluster.x-k8s.io/cluster-name: {{ include "capv-helm-chart.clusterName" . }}
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ include "capv-helm-chart.clusterName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks: {{ toYaml .Values.cluster.podCidrBlocks | nindent 8}}
+    services:
+      cidrBlocks: {{ toYaml .Values.cluster.servicesCidrBlocks | nindent 8 }}
+  controlPlaneEndpoint:
+    host: {{ .Values.cluster.controlPlaneEndpoint.host }}
+    port: {{ .Values.cluster.controlPlaneEndpoint.port }}
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: {{ include "capv-helm-chart.clusterName" . }}
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: VSphereCluster
+    name: {{ include "capv-helm-chart.clusterName" . }}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: VSphereCluster
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ include "capv-helm-chart.clusterName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  controlPlaneEndpoint:
+    host: {{ .Values.cluster.controlPlaneEndpoint.host }}
+    port: {{ .Values.cluster.controlPlaneEndpoint.port }}
+  identityRef:
+    kind: Secret
+    name: {{ .Release.Name }}-id
+  server: {{ .Values.vsphere.server }}
+  thumbprint: '{{ .Values.vsphere.tlsThumbprint }}'
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ .Release.Name }}-id
+  namespace: {{ .Release.Namespace | quote }}
+stringData:
+  password: {{ .Values.vsphere.password }}
+  username: {{ .Values.vsphere.username }}

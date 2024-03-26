@@ -1,0 +1,50 @@
+{{- if .Values.cni.calico.enabled }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: cni-calico-crd-others
+  namespace: {{ .Release.Namespace | quote }}
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+data:
+  data: |
+    {{- .Files.Get "tigera-operator-crd-others.yaml" | nindent 4 }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: cni-calico-crd-installations
+  namespace: {{ .Release.Namespace | quote }}
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+data:
+  data: |
+    {{- .Files.Get "tigera-operator-crd-installations.yaml" | nindent 4 }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: cni-calico
+  namespace: {{ .Release.Namespace | quote }}
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+data:
+  data: |
+    {{- .Files.Get "tigera-operator.yaml" | nindent 4 }}
+    ---
+    apiVersion: operator.tigera.io/v1
+    kind: Installation
+    metadata:
+      name: default
+    spec: {{ .Values.cni.calico.config | nindent 6}}
+{{- end }}

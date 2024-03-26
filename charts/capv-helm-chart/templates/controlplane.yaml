@@ -1,0 +1,159 @@
+{{- $templatePrefix := printf "%s-control-plane" (include "capv-helm-chart.clusterName" .)}}
+{{$controlPlaneData := dict "Values" .Values "templateValues" .Values.machines.controlPlane "templatePrefix" $templatePrefix "Release" .Release}}
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ include "capv-helm-chart.clusterName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  kubeadmConfigSpec:
+    clusterConfiguration:
+      {{- include "capv-helm-chart.kubeadm.clusterConfiguration" . | nindent 6 }}
+    files:
+    {{- if .Values.kubernetes.kubeadm.controlPlane.additionalFiles }}
+{{ toYaml .Values.kubernetes.kubeadm.controlPlane.additionalFiles | indent 4 }}
+    {{- end }}
+    {{- if .Values.kubernetes.additionnalClientCaFile }}
+    - path: /etc/kubernetes/pki/client_ca_custom.pem
+      owner: root:root
+      content: |-
+{{ .Values.kubernetes.additionnalClientCaFile | indent 8 }}
+    {{- end }}
+    - content: |
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          creationTimestamp: null
+          name: kube-vip
+          namespace: kube-system
+        spec:
+          priorityClassName: system-node-critical
+          containers:
+          - args:
+            - manager
+            env:
+            - name: vip_arp
+              value: "true"
+            - name: vip_leaderelection
+              value: "true"
+            - name: cp_enable
+              value: "true"
+            - name: address
+              value: {{ .Values.cluster.controlPlaneEndpoint.host }}
+            - name: vip_interface
+              value: {{ default "" .Values.cluster.controlPlaneEndpoint.interface }}
+            - name: port
+              value: "{{ .Values.cluster.controlPlaneEndpoint.port }}"
+            - name: vip_leaseduration
+              value: "15"
+            - name: vip_renewdeadline
+              value: "10"
+            - name: vip_retryperiod
+              value: "2"
+            image: ghcr.io/kube-vip/kube-vip:{{ .Values.machines.controlPlane.kubeVipVersion }}
+            imagePullPolicy: IfNotPresent
+            name: kube-vip
+            resources: {}
+            securityContext:
+              capabilities:
+                add:
+                - NET_ADMIN
+                - NET_RAW
+                - SYS_TIME
+            volumeMounts:
+            - mountPath: /etc/kubernetes/admin.conf
+              name: kubeconfig
+          hostAliases:
+          - hostnames:
+            - kubernetes
+            ip: 127.0.0.1
+          hostNetwork: true
+          volumes:
+          - hostPath:
+              path: /etc/kubernetes/admin.conf
+              type: FileOrCreate
+            name: kubeconfig
+        status: {}
+      owner: root:root
+      path: /etc/kubernetes/manifests/kube-vip.yaml
+    initConfiguration:
+      nodeRegistration:
+        criSocket: {{ .Values.machines.controlPlane.criSocket }}
+        kubeletExtraArgs:
+          cloud-provider: external
+          {{- if .Values.kubernetes.kubeadm.commonKubeletExtraArgs }}
+          {{- toYaml .Values.kubernetes.kubeadm.commonKubeletExtraArgs | nindent 10 }}
+          {{- end }}
+          {{- if .Values.machines.controlPlane.kubeletExtraArgs }}
+          {{- toYaml .Values.machines.controlPlane.kubeletExtraArgs | nindent 10 }}
+          {{- end }}
+        name: '{{`{{ ds.meta_data.hostname }}`}}'
+      {{- if .Values.kubernetes.kubeadm.controlPlane.patchesDirectory }}
+      patches:
+        directory: {{ .Values.kubernetes.kubeadm.controlPlane.patchesDirectory }}
+      {{- end }}
+    joinConfiguration:
+      nodeRegistration:
+        criSocket: {{ .Values.machines.controlPlane.criSocket }}
+        kubeletExtraArgs:
+          cloud-provider: external
+          {{- if .Values.kubernetes.kubeadm.commonKubeletExtraArgs }}
+          {{- toYaml .Values.kubernetes.kubeadm.commonKubeletExtraArgs | nindent 10 }}
+          {{- end }}
+          {{- if .Values.machines.controlPlane.kubeletExtraArgs }}
+          {{- toYaml .Values.machines.controlPlane.kubeletExtraArgs | nindent 10 }}
+          {{- end }}
+        name: '{{`{{ ds.meta_data.hostname }}`}}'
+      {{- if .Values.kubernetes.kubeadm.controlPlane.patchesDirectory }}
+      patches:
+        directory: {{ .Values.kubernetes.kubeadm.controlPlane.patchesDirectory }}
+      {{- end }}
+    preKubeadmCommands:
+    - hostname "{{`{{ ds.meta_data.hostname }}`}}"
+    - echo "::1         ipv6-localhost ipv6-loopback" >/etc/hosts
+    - echo "127.0.0.1   localhost" >>/etc/hosts
+    - echo "127.0.0.1   {{`{{ ds.meta_data.hostname }}`}}" >>/etc/hosts
+    - echo "{{`{{ ds.meta_data.hostname }}`}}" >/etc/hostname
+    {{- if .Values.kubernetes.additionnalClientCaFile }}
+    - cat /etc/kubernetes/pki/client_ca_custom.pem /etc/kubernetes/pki/ca.crt > /etc/kubernetes/pki/client_ca_full.pem
+    {{- end }}
+    {{- if .Values.kubernetes.kubeadm.controlPlane.preKubeadmAdditionalCommands }}
+    {{- toYaml .Values.kubernetes.kubeadm.controlPlane.preKubeadmAdditionalCommands | nindent 4 }}
+    {{- end }}
+    useExperimentalRetryJoin: true
+    {{- if .Values.kubernetes.kubeadm.controlPlane.postKubeadmAdditionalCommands }}
+    postKubeadmCommands:
+    {{- toYaml .Values.kubernetes.kubeadm.controlPlane.postKubeadmAdditionalCommands | nindent 4 }}
+    {{- end }}
+    {{- if .Values.machines.users }}
+    users:
+      {{- toYaml .Values.machines.users | nindent 6 }}
+    {{- end }}
+  machineTemplate:
+    {{- if .Values.machines.controlPlane.nodeDrainTimeout }}
+    nodeDrainTimeout: {{ .Values.machines.controlPlane.nodeDrainTimeout }}
+    {{- end }}
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: VSphereMachineTemplate
+      name: {{ include "capv-helm-chart.VSphereMachineTemplateName" $controlPlaneData }}
+  replicas: {{ .Values.machines.controlPlane.replicas  }}
+  version: {{ .Values.kubernetes.version | quote }}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: VSphereMachineTemplate
+metadata:
+  {{- if include "capv-helm-chart.annotations" . }}
+  annotations: {{- include "capv-helm-chart.annotations" . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "capv-helm-chart.labels" . | nindent 4 }}
+  name: {{ include "capv-helm-chart.VSphereMachineTemplateName" $controlPlaneData }}
+  namespace: {{ .Release.Namespace | quote }}
+spec: {{- include "capv-helm-chart.VSphereMachineTemplate" $controlPlaneData | nindent 2 }}
